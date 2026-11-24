@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db/prisma";
+ï»¿import { prisma } from "@/lib/db/prisma";
 
 export async function PresentationList() {
   const presentations = await prisma.presentation.findMany({
@@ -9,7 +9,7 @@ export async function PresentationList() {
   if (presentations.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
-        Aucune présentation pour le moment. Créez la première ci-dessus.
+        Aucune prÃ©sentation pour le moment. CrÃ©ez la premiÃ¨re ci-dessus.
       </p>
     );
   }
@@ -23,10 +23,12 @@ export async function PresentationList() {
             {p._count.slides} diapositive{p._count.slides > 1 ? "s" : ""}
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Modifiée le {p.updatedAt.toLocaleDateString("fr-FR")}
+            ModifiÃ©e le {p.updatedAt.toLocaleDateString("fr-FR")}
           </p>
         </li>
       ))}
     </ul>
   );
 }
+
+
