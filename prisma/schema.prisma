@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+enum ElementType {
+  TEXT
+  IMAGE
+  SHAPE
+  TABLE
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  presentations Presentation[]
+  assets        Asset[]
+}
+
+model Theme {
+  id            String         @id @default(cuid())
+  name          String
+  colors        Json
+  fonts         Json
+  presentations Presentation[]
+}
+
+model Presentation {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  revision    Int             @default(1)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  ownerId     String
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  themeId     String?
+  theme       Theme?          @relation(fields: [themeId], references: [id])
+  slides      Slide[]
+  analyses    CoachAnalysis[]
+  versions    Version[]
+
+  @@index([ownerId])
+}
+
+model Slide {
+  id             String       @id @default(cuid())
+  position       Int
+  notes          String?
+  background     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  presentationId String
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  elements       SlideElement[]
+
+  @@index([presentationId, position])
+}
+
+model SlideElement {
+  id       String      @id @default(cuid())
+  type     ElementType
+  x        Float
+  y        Float
+  width    Float
+  height   Float
+  rotation Float       @default(0)
+  zIndex   Int         @default(0)
+  props    Json
+  slideId  String
+  slide    Slide       @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  assetId  String?
+  asset    Asset?      @relation(fields: [assetId], references: [id])
+
+  @@index([slideId])
+}
+
+model Asset {
+  id        String         @id @default(cuid())
+  url       String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime       @default(now())
+  ownerId   String
+  owner     User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  elements  SlideElement[]
+}
+
+model CoachAnalysis {
+  id             String       @id @default(cuid())
+  score          Int
+  report         Json
+  createdAt      DateTime     @default(now())
+  presentationId String
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+}
+
+model Version {
+  id             String       @id @default(cuid())
+  revision       Int
+  snapshot       Json
+  createdAt      DateTime     @default(now())
+  presentationId String
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+
+  @@unique([presentationId, revision])
+}
