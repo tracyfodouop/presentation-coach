@@ -44,9 +44,12 @@ async function PresentationView({
       <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {presentation.slides.map((slide, index) => (
           <li key={slide.id}>
-            <div className="flex aspect-video items-center justify-center rounded-lg border border-gray-300 bg-white text-3xl font-semibold text-gray-300 shadow-sm">
+            <Link
+              href={`/presentations/${presentation.id}/slides/${slide.id}`}
+              className="flex aspect-video items-center justify-center rounded-lg border border-gray-300 bg-white text-3xl font-semibold text-gray-300 shadow-sm hover:border-gray-500"
+            >
               {index + 1}
-            </div>
+            </Link>
             <div className="mt-2 flex gap-2 text-sm">
               <form action={duplicateSlide.bind(null, slide.id)}>
                 <button
