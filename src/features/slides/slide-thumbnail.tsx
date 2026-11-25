@@ -1,6 +1,6 @@
 ﻿type PreviewElement = {
   id: string;
-  type: "TEXT" | "SHAPE" | string;
+  type: "TEXT" | "SHAPE" | "IMAGE" | string;
   x: number;
   y: number;
   width: number;
@@ -38,6 +38,7 @@ export default function SlideThumbnail({
             text?: string;
             fontSize?: number;
             fill?: string;
+            src?: string;
           };
           const fill = p.fill ?? "#000000";
 
@@ -59,6 +60,24 @@ export default function SlideThumbnail({
                 {p.text ?? ""}
               </div>
             );
+          }
+
+          if (el.type === "IMAGE") {
+            return p.src ? (
+              <img
+                key={el.id}
+                src={p.src}
+                alt=""
+                style={{
+                  position: "absolute",
+                  left: `${el.x}px`,
+                  top: `${el.y}px`,
+                  width: `${el.width}px`,
+                  height: `${el.height}px`,
+                  objectFit: "cover",
+                }}
+              />
+            ) : null;
           }
 
           return (
