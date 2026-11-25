@@ -26,4 +26,19 @@ export async function createPresentation(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function renamePresentation(id: string, formData: FormData) {
+  const title = String(formData.get("title") ?? "").trim().slice(0, 120);
+  if (!title) return;
 
+  await prisma.presentation
+    .update({ where: { id }, data: { title } })
+    .catch(() => null);
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/presentations/${id}`);
+}
+
+export async function deletePresentation(id: string) {
+  await prisma.presentation.delete({ where: { id } }).catch(() => null);
+  revalidatePath("/dashboard");
+}
