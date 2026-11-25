@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Text } from "react-konva";
+import { saveSlide } from "@/features/slides/editor-actions";
 
 const SLIDE_WIDTH = 1920;
 const SLIDE_HEIGHT = 1080;
@@ -15,7 +16,7 @@ const THEMES = [
 
 type Theme = (typeof THEMES)[number];
 
-type El = {
+export type El = {
   id: string;
   type: "text" | "rect";
   x: number;
@@ -27,9 +28,15 @@ type El = {
   fill: string;
 };
 
+type Props = {
+  slideId?: string;
+  initialBackground?: string | null;
+  initialElements?: El[];
+};
+
 const base = { text: "", fontSize: 0, width: 0, height: 0 };
 
-function initialElements(theme: Theme): El[] {
+function defaultElements(theme: Theme): El[] {
   return [
     { ...base, id: "title", type: "text", x: 160, y: 380, text: "Titre de la diapositive", fontSize: 110, fill: theme.text },
     { ...base, id: "line", type: "rect", x: 160, y: 530, width: 320, height: 12, fill: theme.accent },
@@ -37,13 +44,18 @@ function initialElements(theme: Theme): El[] {
   ];
 }
 
-export default function SlideCanvas() {
+export default function SlideCanvas({ slideId, initialBackground, initialElements }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
-  const [background, setBackground] = useState(THEMES[0].background);
-  const [accent, setAccent] = useState(THEMES[0].accent);
-  const [elements, setElements] = useState<El[]>(() => initialElements(THEMES[0]));
+  const [background, setBackground] = useState(initialBackground ?? THEMES[0].background);
+  const [elements, setElements] = useState<El[]>(() =>
+    initialElements && initialElements.length > 0 ? initialElements : defaultElements(THEMES[0]),
+  );
+  const [accent, setAccent] = useState(
+    () => initialElements?.find((e) => e.type === "rect")?.fill ?? THEMES[0].accent,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
     function resize() {
@@ -59,10 +71,12 @@ export default function SlideCanvas() {
   const selected = elements.find((e) => e.id === selectedId) ?? null;
 
   function update(id: string, patch: Partial<El>) {
+    setStatus("idle");
     setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }
 
   function applyTheme(theme: Theme) {
+    setStatus("idle");
     setBackground(theme.background);
     setAccent(theme.accent);
     setElements((prev) =>
@@ -71,6 +85,7 @@ export default function SlideCanvas() {
   }
 
   function addText() {
+    setStatus("idle");
     const id = crypto.randomUUID();
     const color = elements.find((e) => e.type === "text")?.fill ?? "#111111";
     setElements((prev) => [
@@ -81,6 +96,7 @@ export default function SlideCanvas() {
   }
 
   function addRect() {
+    setStatus("idle");
     const id = crypto.randomUUID();
     setElements((prev) => [
       ...prev,
@@ -91,8 +107,20 @@ export default function SlideCanvas() {
 
   function removeSelected() {
     if (!selectedId) return;
+    setStatus("idle");
     setElements((prev) => prev.filter((e) => e.id !== selectedId));
     setSelectedId(null);
+  }
+
+  async function handleSave() {
+    if (!slideId) return;
+    setStatus("saving");
+    try {
+      const result = await saveSlide(slideId, background, elements);
+      setStatus(result.ok ? "saved" : "error");
+    } catch {
+      setStatus("error");
+    }
   }
 
   return (
@@ -118,8 +146,29 @@ export default function SlideCanvas() {
         ))}
         <label className="flex items-center gap-2 text-sm">
           Fond
-          <input type="color" value={background} onChange={(e) => setBackground(e.target.value)} />
+          <input
+            type="color"
+            value={background}
+            onChange={(e) => {
+              setStatus("idle");
+              setBackground(e.target.value);
+            }}
+          />
         </label>
+        {slideId && (
+          <div className="ml-auto flex items-center gap-3">
+            {status === "saved" && <span className="text-sm text-green-600">Enregistré ✓</span>}
+            {status === "error" && <span className="text-sm text-red-600">Échec de l’enregistrement</span>}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={status === "saving"}
+              className="rounded-lg bg-blue-600 px-4 py-1 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {status === "saving" ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          </div>
+        )}
       </div>
 
       {selected ? (
@@ -169,7 +218,6 @@ export default function SlideCanvas() {
               onClick={() => setSelectedId(null)}
               onTap={() => setSelectedId(null)}
             />
-            <Rect width={48} height={SLIDE_HEIGHT} fill={accent} listening={false} />
             {elements.map((el) =>
               el.type === "text" ? (
                 <Text
