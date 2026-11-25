@@ -3,24 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 
-type SavedElement = {
-  type?: "text" | "rect" | "image";
+const COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : 0;
+}
+
+export type SavedElement = {
+  id: string;
+  type?: "text" | "rect" | "image" | "video";
   x: number;
   y: number;
-  width: number;
-  height: number;
   text: string;
   fontSize: number;
+  width: number;
+  height: number;
   fill: string;
   src?: string;
 };
-
-const COLOR = /^#[0-9a-fA-F]{6}$/;
-
-function num(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
 
 export async function saveSlide(
   slideId: string,
@@ -41,15 +41,35 @@ export async function saveSlide(
       data: {
         background: COLOR.test(background) ? background : "#ffffff",
         elements: {
-          create: elements.map((e, index) => ({
-            type: e.type === "text" ? ("TEXT" as const) : e.type === "image" ? ("IMAGE" as const) : ("SHAPE" as const),
-            x: num(e.x),
-            y: num(e.y),
-            width: num(e.width),
-            height: num(e.height),
-            zIndex: index,
-            props: e.type === "image" ? { src: String(e.src ?? "").slice(0, 2000) } : { text: String(e.text ?? "").slice(0, 2000), fontSize: num(e.fontSize), fill: COLOR.test(e.fill) ? e.fill : "#000000" },
-          })),
+          create: elements.map((e, index) => {
+            const elementType =
+              e.type === "text"
+                ? ("TEXT" as const)
+                : e.type === "image"
+                  ? ("IMAGE" as const)
+                  : ("SHAPE" as const);
+
+            const cleanSrc = String(e.src ?? "").slice(0, 500000);
+
+            return {
+              type: elementType,
+              x: num(e.x),
+              y: num(e.y),
+              width: num(e.width),
+              height: num(e.height),
+              zIndex: index,
+              props:
+                e.type === "image"
+                  ? { src: cleanSrc }
+                  : e.type === "video"
+                    ? { kind: "video", src: cleanSrc }
+                    : {
+                        text: String(e.text ?? "").slice(0, 2000),
+                        fontSize: num(e.fontSize),
+                        fill: COLOR.test(e.fill) ? e.fill : "#000000",
+                      },
+            };
+          }),
         },
       },
     }),
@@ -62,5 +82,3 @@ export async function saveSlide(
   revalidatePath(`/presentations/${slide.presentationId}`);
   return { ok: true as const };
 }
-
-

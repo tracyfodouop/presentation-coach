@@ -18,7 +18,7 @@ type Theme = (typeof THEMES)[number];
 
 export type El = {
   id: string;
-  type: "text" | "rect" | "image";
+  type: "text" | "rect" | "image" | "video";
   x: number;
   y: number;
   text: string;
@@ -54,6 +54,34 @@ function cloneElements(list: El[]): El[] {
   return list.map((e) => ({ ...e }));
 }
 
+function resizeImageFile(file: File, maxWidth = 1280): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const ratio = img.width > maxWidth ? maxWidth / img.width : 1;
+        const w = Math.max(1, Math.round(img.width * ratio));
+        const h = Math.max(1, Math.round(img.height * ratio));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(String(reader.result ?? ""));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = reject;
+      img.src = String(reader.result ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function CanvasImage({
   el,
   isSelected,
@@ -73,7 +101,9 @@ function CanvasImage({
       return;
     }
     const image = new window.Image();
-    image.crossOrigin = "anonymous";
+    if (!el.src.startsWith("data:")) {
+      image.crossOrigin = "anonymous";
+    }
     image.onload = () => setImg(image);
     image.onerror = () => setImg(null);
     image.src = el.src;
@@ -118,6 +148,8 @@ function CanvasImage({
 
 export default function SlideCanvas({ slideId, initialBackground, initialElements }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const [scale, setScale] = useState(0.4);
   const [background, setBackground] = useState(initialBackground ?? THEMES[0].background);
   const [elements, setElements] = useState<El[]>(() =>
@@ -242,23 +274,53 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
     setSelectedId(id);
   }
 
-  function addImage() {
+  function addImageUrl() {
     const url = window.prompt("URL de l'image (https://...):");
     if (!url || !url.trim()) return;
     const id = crypto.randomUUID();
     const next: El[] = [
       ...elements,
-      {
-        ...base,
-        id,
-        type: "image",
-        x: 500,
-        y: 260,
-        width: 640,
-        height: 360,
-        fill: "#ffffff",
-        src: url.trim(),
-      },
+      { ...base, id, type: "image", x: 500, y: 260, width: 640, height: 360, fill: "#ffffff", src: url.trim() },
+    ];
+    commit(background, next);
+    setSelectedId(id);
+  }
+
+  async function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const dataUrl = await resizeImageFile(file);
+    const id = crypto.randomUUID();
+    const next: El[] = [
+      ...elements,
+      { ...base, id, type: "image", x: 500, y: 260, width: 640, height: 360, fill: "#ffffff", src: dataUrl },
+    ];
+    commit(background, next);
+    setSelectedId(id);
+  }
+
+  function addVideoUrl() {
+    const url = window.prompt("URL de la vidéo (.mp4, .webm, etc.):");
+    if (!url || !url.trim()) return;
+    const id = crypto.randomUUID();
+    const next: El[] = [
+      ...elements,
+      { ...base, id, type: "video", x: 480, y: 240, width: 720, height: 405, fill: "#000000", src: url.trim() },
+    ];
+    commit(background, next);
+    setSelectedId(id);
+  }
+
+  function handleVideoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const blobUrl = URL.createObjectURL(file);
+    const id = crypto.randomUUID();
+    const next: El[] = [
+      ...elements,
+      { ...base, id, type: "video", x: 480, y: 240, width: 720, height: 405, fill: "#000000", src: blobUrl },
     ];
     commit(background, next);
     setSelectedId(id);
@@ -282,9 +344,26 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
     }
   }
 
+  const videos = elements.filter((e) => e.type === "video");
+
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageFile}
+        className="hidden"
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        onChange={handleVideoFile}
+        className="hidden"
+      />
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={undo}
@@ -310,8 +389,25 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
         <button type="button" onClick={addRect} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
           + Rectangle
         </button>
-        <button type="button" onClick={addImage} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
-          + Image
+        <button type="button" onClick={addImageUrl} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
+          + Image URL
+        </button>
+        <button
+          type="button"
+          onClick={() => imageInputRef.current?.click()}
+          className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
+        >
+          📁 Image PC
+        </button>
+        <button type="button" onClick={addVideoUrl} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
+          + Vidéo URL
+        </button>
+        <button
+          type="button"
+          onClick={() => videoInputRef.current?.click()}
+          className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
+        >
+          🎬 Vidéo PC
         </button>
         <span className="text-gray-300">|</span>
         {THEMES.map((theme) => (
@@ -370,15 +466,15 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
               </label>
             </>
           )}
-          {selected.type === "image" && (
+          {(selected.type === "image" || selected.type === "video") && (
             <input
               value={selected.src ?? ""}
               onChange={(e) => update(selected.id, { src: e.target.value })}
-              placeholder="URL de l'image"
+              placeholder={selected.type === "image" ? "URL ou image" : "URL de la vidéo"}
               className="min-w-[260px] flex-1 rounded border border-gray-300 px-2 py-1"
             />
           )}
-          {selected.type !== "image" && (
+          {selected.type !== "image" && selected.type !== "video" && (
             <label className="flex items-center gap-2">
               Couleur
               <input type="color" value={selected.fill} onChange={(e) => update(selected.id, { fill: e.target.value })} />
@@ -394,7 +490,7 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
 
       <div
         ref={containerRef}
-        className="w-full overflow-hidden rounded-lg border border-gray-300 shadow-md"
+        className="relative w-full overflow-hidden rounded-lg border border-gray-300 shadow-md"
         style={{ aspectRatio: "16 / 9" }}
       >
         <Stage width={SLIDE_WIDTH * scale} height={SLIDE_HEIGHT * scale} scaleX={scale} scaleY={scale}>
@@ -431,6 +527,22 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
                   onSelect={() => setSelectedId(el.id)}
                   onMove={(x, y) => update(el.id, { x, y })}
                 />
+              ) : el.type === "video" ? (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill="rgba(0,0,0,0.01)"
+                  stroke={el.id === selectedId ? "#2563eb" : undefined}
+                  strokeWidth={el.id === selectedId ? 6 : 0}
+                  draggable
+                  onClick={() => setSelectedId(el.id)}
+                  onTap={() => setSelectedId(el.id)}
+                  onDragStart={() => setSelectedId(el.id)}
+                  onDragEnd={(e) => update(el.id, { x: e.target.x(), y: e.target.y() })}
+                />
               ) : (
                 <Rect
                   key={el.id}
@@ -451,6 +563,26 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
             )}
           </Layer>
         </Stage>
+
+        {videos.map((v) =>
+          v.src ? (
+            <video
+              key={v.id}
+              src={v.src}
+              controls
+              onClick={() => setSelectedId(v.id)}
+              style={{
+                position: "absolute",
+                left: `${v.x * scale}px`,
+                top: `${v.y * scale}px`,
+                width: `${v.width * scale}px`,
+                height: `${v.height * scale}px`,
+                objectFit: "cover",
+                border: v.id === selectedId ? "3px solid #2563eb" : "none",
+              }}
+            />
+          ) : null,
+        )}
       </div>
     </div>
   );

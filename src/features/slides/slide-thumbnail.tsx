@@ -1,6 +1,6 @@
 ﻿type PreviewElement = {
   id: string;
-  type: "TEXT" | "SHAPE" | "IMAGE" | string;
+  type: "TEXT" | "SHAPE" | "IMAGE" | "VIDEO" | string;
   x: number;
   y: number;
   width: number;
@@ -39,6 +39,7 @@ export default function SlideThumbnail({
             fontSize?: number;
             fill?: string;
             src?: string;
+            kind?: string;
           };
           const fill = p.fill ?? "#000000";
 
@@ -68,6 +69,24 @@ export default function SlideThumbnail({
                 key={el.id}
                 src={p.src}
                 alt=""
+                style={{
+                  position: "absolute",
+                  left: `${el.x}px`,
+                  top: `${el.y}px`,
+                  width: `${el.width}px`,
+                  height: `${el.height}px`,
+                  objectFit: "cover",
+                }}
+              />
+            ) : null;
+          }
+
+          if (el.type === "VIDEO" || p.kind === "video") {
+            return p.src ? (
+              <video
+                key={el.id}
+                src={p.src}
+                muted
                 style={{
                   position: "absolute",
                   left: `${el.x}px`,
