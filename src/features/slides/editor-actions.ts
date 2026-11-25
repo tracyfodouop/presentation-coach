@@ -11,7 +11,8 @@ type SavedElement = {
   height: number;
   text: string;
   fontSize: number;
-  fill: string;\n  src?: string;
+  fill: string;
+  src?: string;
 };
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -61,4 +62,5 @@ export async function saveSlide(
   revalidatePath(`/presentations/${slide.presentationId}`);
   return { ok: true as const };
 }
+
 
