@@ -31,7 +31,8 @@ async function PresentationView({
 
       <div className="mt-2 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">{presentation.title}</h1>
-        <form action={addSlide.bind(null, presentation.id)}>
+        <Link href={`/presentations/${presentation.id}/coach`} className="rounded-lg border border-gray-300 px-4 py-2 font-medium hover:bg-gray-50">Coach</Link>
+          <form action={addSlide.bind(null, presentation.id)}>
           <button
             type="submit"
             className="rounded-lg bg-black px-4 py-2 font-medium text-white"
@@ -87,3 +88,4 @@ export default function PresentationPage({
     </Suspense>
   );
 }
+
