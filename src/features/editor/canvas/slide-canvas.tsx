@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text } from "react-konva";
+import { Stage, Layer, Rect, Text, Image as KonvaImage } from "react-konva";
 import { saveSlide } from "@/features/slides/editor-actions";
 
 const SLIDE_WIDTH = 1920;
@@ -18,7 +18,7 @@ type Theme = (typeof THEMES)[number];
 
 export type El = {
   id: string;
-  type: "text" | "rect";
+  type: "text" | "rect" | "image";
   x: number;
   y: number;
   text: string;
@@ -26,6 +26,7 @@ export type El = {
   width: number;
   height: number;
   fill: string;
+  src?: string;
 };
 
 type Snapshot = {
@@ -51,6 +52,68 @@ function defaultElements(theme: Theme): El[] {
 
 function cloneElements(list: El[]): El[] {
   return list.map((e) => ({ ...e }));
+}
+
+function CanvasImage({
+  el,
+  isSelected,
+  onSelect,
+  onMove,
+}: {
+  el: El;
+  isSelected: boolean;
+  onSelect: () => void;
+  onMove: (x: number, y: number) => void;
+}) {
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!el.src) {
+      setImg(null);
+      return;
+    }
+    const image = new window.Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => setImg(image);
+    image.onerror = () => setImg(null);
+    image.src = el.src;
+  }, [el.src]);
+
+  if (!img) {
+    return (
+      <Rect
+        x={el.x}
+        y={el.y}
+        width={el.width}
+        height={el.height}
+        fill="#e5e7eb"
+        stroke={isSelected ? "#2563eb" : "#9ca3af"}
+        strokeWidth={isSelected ? 6 : 2}
+        draggable
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragStart={onSelect}
+        onDragEnd={(e) => onMove(e.target.x(), e.target.y())}
+      />
+    );
+  }
+
+  return (
+    <KonvaImage
+      image={img}
+      x={el.x}
+      y={el.y}
+      width={el.width}
+      height={el.height}
+      stroke={isSelected ? "#2563eb" : undefined}
+      strokeWidth={isSelected ? 6 : 0}
+      draggable
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragStart={onSelect}
+      onDragEnd={(e) => onMove(e.target.x(), e.target.y())}
+    />
+  );
 }
 
 export default function SlideCanvas({ slideId, initialBackground, initialElements }: Props) {
@@ -153,7 +216,7 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
     setAccent(theme.accent);
     const next = elements.map((e) => ({
       ...e,
-      fill: e.type === "text" ? theme.text : theme.accent,
+      fill: e.type === "text" ? theme.text : e.type === "rect" ? theme.accent : e.fill,
     }));
     commit(theme.background, next);
   }
@@ -174,6 +237,28 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
     const next: El[] = [
       ...elements,
       { ...base, id, type: "rect", x: 400, y: 400, width: 400, height: 240, fill: accent },
+    ];
+    commit(background, next);
+    setSelectedId(id);
+  }
+
+  function addImage() {
+    const url = window.prompt("URL de l'image (https://...):");
+    if (!url || !url.trim()) return;
+    const id = crypto.randomUUID();
+    const next: El[] = [
+      ...elements,
+      {
+        ...base,
+        id,
+        type: "image",
+        x: 500,
+        y: 260,
+        width: 640,
+        height: 360,
+        fill: "#ffffff",
+        src: url.trim(),
+      },
     ];
     commit(background, next);
     setSelectedId(id);
@@ -224,6 +309,9 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
         </button>
         <button type="button" onClick={addRect} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
           + Rectangle
+        </button>
+        <button type="button" onClick={addImage} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
+          + Image
         </button>
         <span className="text-gray-300">|</span>
         {THEMES.map((theme) => (
@@ -282,10 +370,20 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
               </label>
             </>
           )}
-          <label className="flex items-center gap-2">
-            Couleur
-            <input type="color" value={selected.fill} onChange={(e) => update(selected.id, { fill: e.target.value })} />
-          </label>
+          {selected.type === "image" && (
+            <input
+              value={selected.src ?? ""}
+              onChange={(e) => update(selected.id, { src: e.target.value })}
+              placeholder="URL de l'image"
+              className="min-w-[260px] flex-1 rounded border border-gray-300 px-2 py-1"
+            />
+          )}
+          {selected.type !== "image" && (
+            <label className="flex items-center gap-2">
+              Couleur
+              <input type="color" value={selected.fill} onChange={(e) => update(selected.id, { fill: e.target.value })} />
+            </label>
+          )}
           <button type="button" onClick={removeSelected} className="rounded border border-red-300 px-3 py-1 text-red-600 hover:bg-red-50">
             Supprimer
           </button>
@@ -324,6 +422,14 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
                   onTap={() => setSelectedId(el.id)}
                   onDragStart={() => setSelectedId(el.id)}
                   onDragEnd={(e) => update(el.id, { x: e.target.x(), y: e.target.y() })}
+                />
+              ) : el.type === "image" ? (
+                <CanvasImage
+                  key={el.id}
+                  el={el}
+                  isSelected={el.id === selectedId}
+                  onSelect={() => setSelectedId(el.id)}
+                  onMove={(x, y) => update(el.id, { x, y })}
                 />
               ) : (
                 <Rect

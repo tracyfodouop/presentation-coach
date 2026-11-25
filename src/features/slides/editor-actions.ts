@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 
 type SavedElement = {
-  type: "text" | "rect";
+  type?: "text" | "rect" | "image";
   x: number;
   y: number;
   width: number;
   height: number;
   text: string;
   fontSize: number;
-  fill: string;
+  fill: string;\n  src?: string;
 };
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -41,17 +41,13 @@ export async function saveSlide(
         background: COLOR.test(background) ? background : "#ffffff",
         elements: {
           create: elements.map((e, index) => ({
-            type: e.type === "text" ? ("TEXT" as const) : ("SHAPE" as const),
+            type: e.type === "text" ? ("TEXT" as const) : e.type === "image" ? ("IMAGE" as const) : ("SHAPE" as const),
             x: num(e.x),
             y: num(e.y),
             width: num(e.width),
             height: num(e.height),
             zIndex: index,
-            props: {
-              text: String(e.text ?? "").slice(0, 2000),
-              fontSize: num(e.fontSize),
-              fill: COLOR.test(e.fill) ? e.fill : "#000000",
-            },
+            props: e.type === "image" ? { src: String(e.src ?? "").slice(0, 2000) } : { text: String(e.text ?? "").slice(0, 2000), fontSize: num(e.fontSize), fill: COLOR.test(e.fill) ? e.fill : "#000000" },
           })),
         },
       },
@@ -65,3 +61,4 @@ export async function saveSlide(
   revalidatePath(`/presentations/${slide.presentationId}`);
   return { ok: true as const };
 }
+
