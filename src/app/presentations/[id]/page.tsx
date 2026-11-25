@@ -7,6 +7,7 @@ import {
   deleteSlide,
   duplicateSlide,
 } from "@/features/slides/actions";
+import SlideThumbnail from "@/features/slides/slide-thumbnail";
 
 async function PresentationView({
   params,
@@ -17,7 +18,12 @@ async function PresentationView({
 
   const presentation = await prisma.presentation.findUnique({
     where: { id },
-    include: { slides: { orderBy: { position: "asc" } } },
+    include: {
+      slides: {
+        orderBy: { position: "asc" },
+        include: { elements: { orderBy: { zIndex: "asc" } } },
+      },
+    },
   });
   if (!presentation) notFound();
 
@@ -31,15 +37,22 @@ async function PresentationView({
 
       <div className="mt-2 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">{presentation.title}</h1>
-        <Link href={`/presentations/${presentation.id}/coach`} className="rounded-lg border border-gray-300 px-4 py-2 font-medium hover:bg-gray-50">Coach</Link>
-          <form action={addSlide.bind(null, presentation.id)}>
-          <button
-            type="submit"
-            className="rounded-lg bg-black px-4 py-2 font-medium text-white"
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/presentations/${presentation.id}/coach`}
+            className="rounded-lg border border-gray-300 px-4 py-2 font-medium hover:bg-gray-50"
           >
-            Ajouter une diapositive
-          </button>
-        </form>
+            Coach
+          </Link>
+          <form action={addSlide.bind(null, presentation.id)}>
+            <button
+              type="submit"
+              className="rounded-lg bg-black px-4 py-2 font-medium text-white"
+            >
+              Ajouter une diapositive
+            </button>
+          </form>
+        </div>
       </div>
 
       <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -47,9 +60,13 @@ async function PresentationView({
           <li key={slide.id}>
             <Link
               href={`/presentations/${presentation.id}/slides/${slide.id}`}
-              className="flex aspect-video items-center justify-center rounded-lg border border-gray-300 bg-white text-3xl font-semibold text-gray-300 shadow-sm hover:border-gray-500"
+              className="group block"
             >
-              {index + 1}
+              <SlideThumbnail
+                index={index}
+                background={slide.background}
+                elements={slide.elements}
+              />
             </Link>
             <div className="mt-2 flex gap-2 text-sm">
               <form action={duplicateSlide.bind(null, slide.id)}>
@@ -88,4 +105,3 @@ export default function PresentationPage({
     </Suspense>
   );
 }
-
