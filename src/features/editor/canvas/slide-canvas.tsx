@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Text } from "react-konva";
 import { saveSlide } from "@/features/slides/editor-actions";
 
@@ -28,6 +28,11 @@ export type El = {
   fill: string;
 };
 
+type Snapshot = {
+  background: string;
+  elements: El[];
+};
+
 type Props = {
   slideId?: string;
   initialBackground?: string | null;
@@ -44,6 +49,10 @@ function defaultElements(theme: Theme): El[] {
   ];
 }
 
+function cloneElements(list: El[]): El[] {
+  return list.map((e) => ({ ...e }));
+}
+
 export default function SlideCanvas({ slideId, initialBackground, initialElements }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
@@ -56,6 +65,46 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [past, setPast] = useState<Snapshot[]>([]);
+  const [future, setFuture] = useState<Snapshot[]>([]);
+
+  function commit(nextBg: string, nextElements: El[]) {
+    setPast((prev) => [...prev.slice(-49), { background, elements: cloneElements(elements) }]);
+    setFuture([]);
+    setBackground(nextBg);
+    setElements(nextElements);
+    setStatus("idle");
+  }
+
+  const undo = useCallback(() => {
+    setPast((prev) => {
+      if (prev.length === 0) return prev;
+      const previous = prev[prev.length - 1];
+      setFuture((f) => [{ background, elements: cloneElements(elements) }, ...f.slice(0, 49)]);
+      setBackground(previous.background);
+      setElements(cloneElements(previous.elements));
+      setSelectedId((curr) =>
+        curr && previous.elements.some((e) => e.id === curr) ? curr : null,
+      );
+      setStatus("idle");
+      return prev.slice(0, -1);
+    });
+  }, [background, elements]);
+
+  const redo = useCallback(() => {
+    setFuture((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev[0];
+      setPast((p) => [...p.slice(-49), { background, elements: cloneElements(elements) }]);
+      setBackground(next.background);
+      setElements(cloneElements(next.elements));
+      setSelectedId((curr) =>
+        curr && next.elements.some((e) => e.id === curr) ? curr : null,
+      );
+      setStatus("idle");
+      return prev.slice(1);
+    });
+  }, [background, elements]);
 
   useEffect(() => {
     function resize() {
@@ -68,47 +117,72 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
     return () => window.removeEventListener("resize", resize);
   }, []);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (isInput) return;
+
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey)) {
+        e.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo, redo]);
+
   const selected = elements.find((e) => e.id === selectedId) ?? null;
 
   function update(id: string, patch: Partial<El>) {
-    setStatus("idle");
-    setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    const next = elements.map((e) => (e.id === id ? { ...e, ...patch } : e));
+    commit(background, next);
   }
 
   function applyTheme(theme: Theme) {
-    setStatus("idle");
-    setBackground(theme.background);
     setAccent(theme.accent);
-    setElements((prev) =>
-      prev.map((e) => ({ ...e, fill: e.type === "text" ? theme.text : theme.accent })),
-    );
+    const next = elements.map((e) => ({
+      ...e,
+      fill: e.type === "text" ? theme.text : theme.accent,
+    }));
+    commit(theme.background, next);
   }
 
   function addText() {
-    setStatus("idle");
     const id = crypto.randomUUID();
     const color = elements.find((e) => e.type === "text")?.fill ?? "#111111";
-    setElements((prev) => [
-      ...prev,
+    const next: El[] = [
+      ...elements,
       { ...base, id, type: "text", x: 300, y: 300, text: "Nouveau texte", fontSize: 72, fill: color },
-    ]);
+    ];
+    commit(background, next);
     setSelectedId(id);
   }
 
   function addRect() {
-    setStatus("idle");
     const id = crypto.randomUUID();
-    setElements((prev) => [
-      ...prev,
+    const next: El[] = [
+      ...elements,
       { ...base, id, type: "rect", x: 400, y: 400, width: 400, height: 240, fill: accent },
-    ]);
+    ];
+    commit(background, next);
     setSelectedId(id);
   }
 
   function removeSelected() {
     if (!selectedId) return;
-    setStatus("idle");
-    setElements((prev) => prev.filter((e) => e.id !== selectedId));
+    const next = elements.filter((e) => e.id !== selectedId);
+    commit(background, next);
     setSelectedId(null);
   }
 
@@ -126,6 +200,25 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={undo}
+          disabled={past.length === 0}
+          title="Annuler (Ctrl+Z)"
+          className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ↶ Annuler
+        </button>
+        <button
+          type="button"
+          onClick={redo}
+          disabled={future.length === 0}
+          title="Rétablir (Ctrl+Y)"
+          className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ↷ Rétablir
+        </button>
+        <span className="text-gray-300">|</span>
         <button type="button" onClick={addText} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
           + Texte
         </button>
@@ -149,10 +242,7 @@ export default function SlideCanvas({ slideId, initialBackground, initialElement
           <input
             type="color"
             value={background}
-            onChange={(e) => {
-              setStatus("idle");
-              setBackground(e.target.value);
-            }}
+            onChange={(e) => commit(e.target.value, elements)}
           />
         </label>
         {slideId && (
