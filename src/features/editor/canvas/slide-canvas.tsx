@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text, Group } from "react-konva";
+import { Stage, Layer, Rect, Text } from "react-konva";
 
 const SLIDE_WIDTH = 1920;
 const SLIDE_HEIGHT = 1080;
@@ -13,13 +13,37 @@ const THEMES = [
   { name: "Rose", background: "#ffe4ec", text: "#4a0d2b", accent: "#e11d74" },
 ];
 
+type Theme = (typeof THEMES)[number];
+
+type El = {
+  id: string;
+  type: "text" | "rect";
+  x: number;
+  y: number;
+  text: string;
+  fontSize: number;
+  width: number;
+  height: number;
+  fill: string;
+};
+
+const base = { text: "", fontSize: 0, width: 0, height: 0 };
+
+function initialElements(theme: Theme): El[] {
+  return [
+    { ...base, id: "title", type: "text", x: 160, y: 380, text: "Titre de la diapositive", fontSize: 110, fill: theme.text },
+    { ...base, id: "line", type: "rect", x: 160, y: 530, width: 320, height: 12, fill: theme.accent },
+    { ...base, id: "subtitle", type: "text", x: 160, y: 580, text: "Sous-titre ou idée principale", fontSize: 52, fill: theme.text },
+  ];
+}
+
 export default function SlideCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
-  const [position, setPosition] = useState({ x: 160, y: 380 });
   const [background, setBackground] = useState(THEMES[0].background);
-  const [textColor, setTextColor] = useState(THEMES[0].text);
   const [accent, setAccent] = useState(THEMES[0].accent);
+  const [elements, setElements] = useState<El[]>(() => initialElements(THEMES[0]));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     function resize() {
@@ -32,15 +56,55 @@ export default function SlideCanvas() {
     return () => window.removeEventListener("resize", resize);
   }, []);
 
-  function applyTheme(theme: (typeof THEMES)[number]) {
+  const selected = elements.find((e) => e.id === selectedId) ?? null;
+
+  function update(id: string, patch: Partial<El>) {
+    setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+
+  function applyTheme(theme: Theme) {
     setBackground(theme.background);
-    setTextColor(theme.text);
     setAccent(theme.accent);
+    setElements((prev) =>
+      prev.map((e) => ({ ...e, fill: e.type === "text" ? theme.text : theme.accent })),
+    );
+  }
+
+  function addText() {
+    const id = crypto.randomUUID();
+    const color = elements.find((e) => e.type === "text")?.fill ?? "#111111";
+    setElements((prev) => [
+      ...prev,
+      { ...base, id, type: "text", x: 300, y: 300, text: "Nouveau texte", fontSize: 72, fill: color },
+    ]);
+    setSelectedId(id);
+  }
+
+  function addRect() {
+    const id = crypto.randomUUID();
+    setElements((prev) => [
+      ...prev,
+      { ...base, id, type: "rect", x: 400, y: 400, width: 400, height: 240, fill: accent },
+    ]);
+    setSelectedId(id);
+  }
+
+  function removeSelected() {
+    if (!selectedId) return;
+    setElements((prev) => prev.filter((e) => e.id !== selectedId));
+    setSelectedId(null);
   }
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={addText} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
+          + Texte
+        </button>
+        <button type="button" onClick={addRect} className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
+          + Rectangle
+        </button>
+        <span className="text-gray-300">|</span>
         {THEMES.map((theme) => (
           <button
             key={theme.name}
@@ -48,77 +112,99 @@ export default function SlideCanvas() {
             onClick={() => applyTheme(theme)}
             className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
           >
-            <span
-              className="inline-block h-4 w-4 rounded-full border border-gray-300"
-              style={{ backgroundColor: theme.accent }}
-            />
+            <span className="inline-block h-4 w-4 rounded-full border border-gray-300" style={{ backgroundColor: theme.accent }} />
             {theme.name}
           </button>
         ))}
-
         <label className="flex items-center gap-2 text-sm">
           Fond
-          <input
-            type="color"
-            value={background}
-            onChange={(e) => setBackground(e.target.value)}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          Texte
-          <input
-            type="color"
-            value={textColor}
-            onChange={(e) => setTextColor(e.target.value)}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          Accent
-          <input
-            type="color"
-            value={accent}
-            onChange={(e) => setAccent(e.target.value)}
-          />
+          <input type="color" value={background} onChange={(e) => setBackground(e.target.value)} />
         </label>
       </div>
+
+      {selected ? (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+          {selected.type === "text" && (
+            <>
+              <input
+                value={selected.text}
+                onChange={(e) => update(selected.id, { text: e.target.value })}
+                className="min-w-[220px] flex-1 rounded border border-gray-300 px-2 py-1"
+              />
+              <label className="flex items-center gap-2">
+                Taille
+                <input
+                  type="range"
+                  min={30}
+                  max={200}
+                  value={selected.fontSize}
+                  onChange={(e) => update(selected.id, { fontSize: Number(e.target.value) })}
+                />
+              </label>
+            </>
+          )}
+          <label className="flex items-center gap-2">
+            Couleur
+            <input type="color" value={selected.fill} onChange={(e) => update(selected.id, { fill: e.target.value })} />
+          </label>
+          <button type="button" onClick={removeSelected} className="rounded border border-red-300 px-3 py-1 text-red-600 hover:bg-red-50">
+            Supprimer
+          </button>
+        </div>
+      ) : (
+        <p className="mb-3 text-sm text-gray-500">Clique sur un élément pour le modifier.</p>
+      )}
 
       <div
         ref={containerRef}
         className="w-full overflow-hidden rounded-lg border border-gray-300 shadow-md"
         style={{ aspectRatio: "16 / 9" }}
       >
-        <Stage
-          width={SLIDE_WIDTH * scale}
-          height={SLIDE_HEIGHT * scale}
-          scaleX={scale}
-          scaleY={scale}
-        >
+        <Stage width={SLIDE_WIDTH * scale} height={SLIDE_HEIGHT * scale} scaleX={scale} scaleY={scale}>
           <Layer>
-            <Rect width={SLIDE_WIDTH} height={SLIDE_HEIGHT} fill={background} />
-            <Rect width={48} height={SLIDE_HEIGHT} fill={accent} />
-            <Group
-              x={position.x}
-              y={position.y}
-              draggable
-              onDragEnd={(e) =>
-                setPosition({ x: e.target.x(), y: e.target.y() })
-              }
-            >
-              <Text
-                text="Titre de la diapositive"
-                fontSize={110}
-                fontStyle="bold"
-                fill={textColor}
-              />
-              <Rect y={140} width={320} height={12} fill={accent} />
-              <Text
-                text="Sous-titre ou idée principale"
-                y={190}
-                fontSize={52}
-                fill={textColor}
-                opacity={0.8}
-              />
-            </Group>
+            <Rect
+              width={SLIDE_WIDTH}
+              height={SLIDE_HEIGHT}
+              fill={background}
+              onClick={() => setSelectedId(null)}
+              onTap={() => setSelectedId(null)}
+            />
+            <Rect width={48} height={SLIDE_HEIGHT} fill={accent} listening={false} />
+            {elements.map((el) =>
+              el.type === "text" ? (
+                <Text
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  text={el.text}
+                  fontSize={el.fontSize}
+                  fontStyle={el.fontSize >= 100 ? "bold" : "normal"}
+                  fill={el.fill}
+                  textDecoration={el.id === selectedId ? "underline" : ""}
+                  draggable
+                  onClick={() => setSelectedId(el.id)}
+                  onTap={() => setSelectedId(el.id)}
+                  onDragStart={() => setSelectedId(el.id)}
+                  onDragEnd={(e) => update(el.id, { x: e.target.x(), y: e.target.y() })}
+                />
+              ) : (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  stroke={el.id === selectedId ? "#2563eb" : undefined}
+                  strokeWidth={el.id === selectedId ? 6 : 0}
+                  draggable
+                  onClick={() => setSelectedId(el.id)}
+                  onTap={() => setSelectedId(el.id)}
+                  onDragStart={() => setSelectedId(el.id)}
+                  onDragEnd={(e) => update(el.id, { x: e.target.x(), y: e.target.y() })}
+                />
+              ),
+            )}
           </Layer>
         </Stage>
       </div>
